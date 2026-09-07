@@ -28,15 +28,26 @@ function show(text) {
   while (reads.children.length > 10) reads.firstChild.remove();
 }
 
+let active = false;
+
 async function readUSB(dev) {
-  await dev.open();
-  if (!dev.configuration) await dev.selectConfiguration(1);
-  const itf = dev.configuration.interfaces.find(i => i.alternates[0].interfaceClass === 0xff);
-  const ep = itf.alternates[0].endpoints.find(e => e.direction === 'in');
-  await dev.claimInterface(itf.interfaceNumber);
-  for (;;) {
-    const r = await dev.transferIn(ep.endpointNumber, ep.packetSize);
-    if (r.data?.byteLength) show(canon(new TextDecoder().decode(r.data)) + ' USB');
+  if (active) return;
+  active = true;
+  try {
+    if (!dev.opened) await dev.open();
+    if (!dev.configuration) await dev.selectConfiguration(1);
+    const itf = dev.configuration.interfaces.find(i => i.alternates[0].interfaceClass === 0xff);
+    if (!itf) throw new Error('no vendor interface — reader not in WebUSB mode');
+    const ep = itf.alternates[0].endpoints.find(e => e.direction === 'in');
+    await dev.claimInterface(itf.interfaceNumber);
+    show('connected');
+    for (;;) {
+      const r = await dev.transferIn(ep.endpointNumber, ep.packetSize);
+      if (r.data?.byteLength) show(canon(new TextDecoder().decode(r.data)) + ' USB');
+    }
+  } catch (e) {
+    active = false;
+    show(e.message);
   }
 }
 
@@ -44,12 +55,15 @@ usb.onclick = () => navigator.usb.requestDevice({ filters: [{ vendorId: 0x04d8, 
   .then(readUSB).catch(e => show(e.message));
 
 nfc.onclick = async () => {
-  const r = new NDEFReader();
-  await r.scan();
-  r.onreading = e => show(canon(e.serialNumber || '') + ' NFC');
+  try {
+    const r = new NDEFReader();
+    await r.scan();
+    show('scanning');
+    r.onreading = e => show(canon(e.serialNumber || '') + ' NFC');
+  } catch (e) { show(e.message); }
 };
 
-navigator.usb?.getDevices().then(d => d[0] && readUSB(d[0]).catch(e => show(e.message)));
+navigator.usb?.getDevices().then(d => d[0] && readUSB(d[0]));
 navigator.serviceWorker?.register('sw.js');
 </script>
 
