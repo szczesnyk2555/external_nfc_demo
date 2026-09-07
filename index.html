@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card Reader</title>
+<link rel="manifest" href="manifest.webmanifest">
+</head>
+<body>
+
+<button id="usb">USB reader</button>
+<button id="nfc">Phone NFC</button>
+<ol id="reads"></ol>
+
+<script>
+const reads = document.getElementById('reads');
+const canon = s => s.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+
+let last = '', lastAt = 0;
+
+function show(text) {
+  const now = Date.now();
+  if (text === last && now - lastAt < 1500) { lastAt = now; return; }
+  last = text; lastAt = now;
+  const li = document.createElement('li');
+  li.textContent = text;
+  reads.append(li);
+  while (reads.children.length > 10) reads.firstChild.remove();
+}
+
+async function readUSB(dev) {
+  await dev.open();
+  if (!dev.configuration) await dev.selectConfiguration(1);
+  const itf = dev.configuration.interfaces.find(i => i.alternates[0].interfaceClass === 0xff);
+  const ep = itf.alternates[0].endpoints.find(e => e.direction === 'in');
+  await dev.claimInterface(itf.interfaceNumber);
+  for (;;) {
+    const r = await dev.transferIn(ep.endpointNumber, ep.packetSize);
+    if (r.data?.byteLength) show(canon(new TextDecoder().decode(r.data)) + ' USB');
+  }
+}
+
+usb.onclick = () => navigator.usb.requestDevice({ filters: [{ vendorId: 0x04d8, productId: 0xfc27 }] })
+  .then(readUSB).catch(e => show(e.message));
+
+nfc.onclick = async () => {
+  const r = new NDEFReader();
+  await r.scan();
+  r.onreading = e => show(canon(e.serialNumber || '') + ' NFC');
+};
+
+navigator.usb?.getDevices().then(d => d[0] && readUSB(d[0]).catch(e => show(e.message)));
+navigator.serviceWorker?.register('sw.js');
+</script>
+
+</body>
+</html>

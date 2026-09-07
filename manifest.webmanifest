@@ -1,0 +1,7 @@
+{
+  "name": "Card Reader",
+  "short_name": "CardReader",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone"
+}
