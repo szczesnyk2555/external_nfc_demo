@@ -8,6 +8,7 @@
 </head>
 <body>
 
+<input id="kbd" autofocus placeholder="Scan a card here (keyboard mode)" autocomplete="off">
 <button id="usb">USB reader</button>
 <button id="nfc">Phone NFC</button>
 <ol id="reads"></ol>
@@ -27,6 +28,18 @@ function show(text) {
   reads.append(li);
   while (reads.children.length > 10) reads.firstChild.remove();
 }
+
+// A wedge types the UID as keystrokes. Most send Enter at the end, but not all,
+// so also flush once typing stops. Refocus so the keystrokes never go astray.
+let t;
+const flush = () => {
+  const v = kbd.value.trim();
+  kbd.value = '';
+  if (v) show(canon(v) + ' KBD');
+};
+kbd.oninput = () => { clearTimeout(t); t = setTimeout(flush, 200); };
+kbd.onkeydown = e => { if (e.key === 'Enter') { clearTimeout(t); flush(); } };
+addEventListener('click', () => kbd.focus());
 
 let active = false;
 
