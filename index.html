@@ -8,7 +8,7 @@
 </head>
 <body>
 
-<input id="kbd" autofocus placeholder="Scan a card here (keyboard mode)" autocomplete="off">
+<input id="kbd" placeholder="Scan anywhere, or type here to test" autocomplete="off">
 <button id="usb">USB reader</button>
 <button id="nfc">Phone NFC</button>
 <ol id="reads"></ol>
@@ -29,8 +29,9 @@ function show(text) {
   while (reads.children.length > 10) reads.firstChild.remove();
 }
 
-// A wedge types the UID as keystrokes. Most send Enter at the end, but not all,
-// so also flush once typing stops. Refocus so the keystrokes never go astray.
+// iOS ignores autofocus and only honours .focus() inside a user gesture, so the
+// field can look focused while keystrokes go elsewhere. Capture on document
+// instead — a hardware keyboard reaches it whether or not anything is focused.
 let t;
 const flush = () => {
   const v = kbd.value.trim();
@@ -39,7 +40,20 @@ const flush = () => {
 };
 kbd.oninput = () => { clearTimeout(t); t = setTimeout(flush, 200); };
 kbd.onkeydown = e => { if (e.key === 'Enter') { clearTimeout(t); flush(); } };
-addEventListener('click', () => kbd.focus());
+
+let buf = '', bufAt = 0, bufT;
+const flushBuf = () => { const v = buf; buf = ''; if (v) show(canon(v) + ' KBD'); };
+addEventListener('keydown', e => {
+  if (document.activeElement === kbd) return;  // the field handles its own input
+  if (e.key === 'Enter') { clearTimeout(bufT); flushBuf(); return; }
+  if (e.key.length !== 1) return;              // skip Shift, Tab, arrows
+  const now = Date.now();
+  if (now - bufAt > 500) buf = '';             // gap means a new scan
+  bufAt = now;
+  buf += e.key;
+  clearTimeout(bufT);
+  bufT = setTimeout(flushBuf, 200);
+});
 
 let active = false;
 
